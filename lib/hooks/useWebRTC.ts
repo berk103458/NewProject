@@ -71,23 +71,54 @@ export function useWebRTC({
     // Handle ICE candidates
     pc.onicecandidate = (event) => {
       if (event.candidate) {
+        console.log("Sending ICE candidate");
         sendSignalingMessage({
           type: "ice-candidate",
           data: event.candidate,
           from: userId,
           to: otherUserId,
         });
+      } else {
+        console.log("ICE gathering complete");
+      }
+    };
+
+    // Handle ICE connection state
+    pc.oniceconnectionstatechange = () => {
+      console.log("ICE connection state:", pc.iceConnectionState);
+      if (pc.iceConnectionState === "failed" || pc.iceConnectionState === "disconnected") {
+        setError("Bağlantı kesildi. Lütfen tekrar deneyin.");
       }
     };
 
     // Handle remote stream
     pc.ontrack = (event) => {
-      console.log("Received remote track", event);
-      if (event.streams[0]) {
-        setRemoteStream(event.streams[0]);
+      console.log("Received remote track", event.track.kind);
+      if (event.streams && event.streams[0]) {
+        const stream = event.streams[0];
+        setRemoteStream(stream);
         if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = event.streams[0];
+          remoteVideoRef.current.srcObject = stream;
+          remoteVideoRef.current.play().catch((err) => {
+            console.warn("Remote video play failed:", err);
+          });
         }
+        setIsCallActive(true);
+        setIsConnecting(false);
+        console.log("Remote stream set, call active");
+      } else if (event.track) {
+        // Fallback: create stream from track
+        const stream = new MediaStream([event.track]);
+        setRemoteStream(stream);
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = stream;
+          remoteVideoRef.current.play().catch((err) => {
+            console.warn("Remote video play failed:", err);
+          });
+        }
+        setIsCallActive(true);
+        setIsConnecting(false);
+        console.log("Remote track set, call active");
       }
     };
 
@@ -111,7 +142,16 @@ export function useWebRTC({
 
   // Setup signaling channel
   const setupSignaling = useCallback(() => {
-    const channel = supabase.channel(`webrtc:${matchId}:${userId}`);
+    // Cleanup existing channel if any
+    if (signalingChannelRef.current) {
+      supabase.removeChannel(signalingChannelRef.current);
+    }
+
+    const channel = supabase.channel(`webrtc:${matchId}:${userId}`, {
+      config: {
+        broadcast: { self: false },
+      },
+    });
     
     channel
       .on("broadcast", { event: "webrtc-signal" }, (payload) => {
@@ -123,7 +163,14 @@ export function useWebRTC({
           handleSignalingMessageRef.current(message);
         }
       })
-      .subscribe();
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          console.log("WebRTC signaling channel subscribed");
+        } else if (status === "CHANNEL_ERROR") {
+          console.error("WebRTC signaling channel error");
+          setError("Bağlantı hatası: Signaling channel açılamadı");
+        }
+      });
 
     signalingChannelRef.current = channel;
     return channel;
@@ -133,13 +180,20 @@ export function useWebRTC({
   const handleSignalingMessage = useCallback(
     async (message: SignalingMessage) => {
       const pc = peerConnectionRef.current;
-      if (!pc) return;
+      if (!pc) {
+        console.warn("Peer connection not ready, ignoring signaling message");
+        return;
+      }
 
       try {
         switch (message.type) {
           case "offer":
+            console.log("Received offer, creating answer");
             await pc.setRemoteDescription(new RTCSessionDescription(message.data));
-            const answer = await pc.createAnswer();
+            const answer = await pc.createAnswer({
+              offerToReceiveAudio: true,
+              offerToReceiveVideo: callType === "video",
+            });
             await pc.setLocalDescription(answer);
             sendSignalingMessage({
               type: "answer",
@@ -147,17 +201,27 @@ export function useWebRTC({
               from: userId,
               to: otherUserId,
             });
+            console.log("Answer sent");
             break;
 
           case "answer":
+            console.log("Received answer");
             await pc.setRemoteDescription(new RTCSessionDescription(message.data));
             break;
 
           case "ice-candidate":
-            await pc.addIceCandidate(new RTCIceCandidate(message.data));
+            if (message.data && pc.remoteDescription) {
+              try {
+                await pc.addIceCandidate(new RTCIceCandidate(message.data));
+                console.log("ICE candidate added");
+              } catch (err) {
+                console.warn("Failed to add ICE candidate:", err);
+              }
+            }
             break;
 
           case "call-end":
+            console.log("Call ended by remote");
             if (endCallRef.current) {
               endCallRef.current();
             }
@@ -168,7 +232,7 @@ export function useWebRTC({
         setError("Signaling hatası: " + (error instanceof Error ? error.message : "Bilinmeyen hata"));
       }
     },
-    [userId, otherUserId, sendSignalingMessage]
+    [userId, otherUserId, sendSignalingMessage, callType]
   );
 
   // Start call (initiator)
@@ -188,8 +252,11 @@ export function useWebRTC({
         localVideoRef.current.srcObject = stream;
       }
 
-      // Setup signaling
-      setupSignaling();
+      // Setup signaling first
+      const channel = setupSignaling();
+      
+      // Wait a bit for channel to be ready
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Create peer connection
       const pc = createPeerConnection();
@@ -200,9 +267,13 @@ export function useWebRTC({
       });
 
       // Create and send offer
-      const offer = await pc.createOffer();
+      const offer = await pc.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: callType === "video",
+      });
       await pc.setLocalDescription(offer);
 
+      // Send offer via signaling
       sendSignalingMessage({
         type: "offer",
         data: offer,
@@ -210,7 +281,8 @@ export function useWebRTC({
         to: otherUserId,
       });
 
-      setIsCallActive(true);
+      console.log("Call started, offer sent");
+      // Note: isCallActive will be set to true when we receive the answer and remote stream
     } catch (error) {
       console.error("Error starting call:", error);
       setError("Arama başlatılamadı: " + (error instanceof Error ? error.message : "Bilinmeyen hata"));
@@ -240,7 +312,9 @@ export function useWebRTC({
 
       // Setup signaling (if not already done)
       if (!signalingChannelRef.current) {
-        setupSignaling();
+        const channel = setupSignaling();
+        // Wait a bit for channel to be ready
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
 
       // Create peer connection
@@ -251,6 +325,7 @@ export function useWebRTC({
         pc.addTrack(track, stream);
       });
 
+      console.log("Call answered, waiting for offer");
       // Answer will be sent when offer is received via handleSignalingMessage
     } catch (error) {
       console.error("Error answering call:", error);

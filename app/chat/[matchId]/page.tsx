@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Send, ArrowLeft, Loader2, Image as ImageIcon, Phone, Video, Bell, ShieldX, Mic, MicOff, VideoIcon, VideoOff, X } from "lucide-react";
 import Link from "next/link";
 import { useWebRTC } from "@/lib/hooks/useWebRTC";
+import { CallModal } from "@/components/call/CallModal";
 
 interface Message {
   id: string;
@@ -716,117 +717,32 @@ export default function ChatPage() {
         </form>
       </div>
 
-      {/* WebRTC Call UI */}
-      {(webrtc.isCallActive || webrtc.isConnecting) && activeCallType && (
-        <div className="fixed inset-0 z-50 bg-black flex flex-col">
-          {/* Remote Video (fullscreen) */}
-          <div className="flex-1 relative bg-black">
-            {activeCallType === "video" ? (
-              <>
-                <video
-                  ref={webrtc.remoteVideoRef}
-                  autoPlay
-                  playsInline
-                  className="w-full h-full object-cover"
-                />
-                {/* Local Video (picture-in-picture) */}
-                {webrtc.localStream && (
-                  <div className="absolute top-4 right-4 w-32 h-48 rounded-lg overflow-hidden border-2 border-neon-purple bg-black">
-                    <video
-                      ref={webrtc.localVideoRef}
-                      autoPlay
-                      playsInline
-                      muted
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="w-full h-full flex items-center justify-center">
-                <div className="text-center">
-                  <div className="w-32 h-32 rounded-full bg-gradient-to-br from-neon-purple to-neon-green flex items-center justify-center mx-auto mb-4">
-                    {matchUser.avatar_url ? (
-                      <Image
-                        src={matchUser.avatar_url}
-                        alt={matchUser.username}
-                        width={128}
-                        height={128}
-                        className="w-full h-full rounded-full object-cover"
-                      />
-                    ) : (
-                      <span className="text-4xl font-bold text-white">
-                        {matchUser.username.charAt(0).toUpperCase()}
-                      </span>
-                    )}
-                  </div>
-                  <h2 className="text-2xl font-bold text-white mb-2">{matchUser.username}</h2>
-                  <p className="text-muted-foreground">
-                    {webrtc.isConnecting ? "Bağlanıyor..." : "Sesli Arama"}
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Call Controls */}
-          <div className="bg-black/80 backdrop-blur-sm p-6">
-            <div className="max-w-md mx-auto flex items-center justify-center gap-4">
-              {/* Mute/Unmute */}
-              <Button
-                variant="outline"
-                size="lg"
-                className="rounded-full w-14 h-14"
-                onClick={webrtc.toggleMute}
-              >
-                {webrtc.isMuted ? (
-                  <MicOff className="w-6 h-6" />
-                ) : (
-                  <Mic className="w-6 h-6" />
-                )}
-              </Button>
-
-              {/* Video On/Off (only for video calls) */}
-              {activeCallType === "video" && (
-                <Button
-                  variant="outline"
-                  size="lg"
-                  className="rounded-full w-14 h-14"
-                  onClick={webrtc.toggleVideo}
-                >
-                  {webrtc.isVideoOff ? (
-                    <VideoOff className="w-6 h-6" />
-                  ) : (
-                    <VideoIcon className="w-6 h-6" />
-                  )}
-                </Button>
-              )}
-
-              {/* End Call */}
-              <Button
-                variant="destructive"
-                size="lg"
-                className="rounded-full w-14 h-14 bg-red-600 hover:bg-red-700"
-                onClick={webrtc.endCall}
-              >
-                <Phone className="w-6 h-6 rotate-[135deg]" />
-              </Button>
-            </div>
-
-            {/* Error Message */}
-            {webrtc.error && (
-              <div className="mt-4 text-center text-red-400 text-sm">{webrtc.error}</div>
-            )}
-
-            {/* Connection Status */}
-            {webrtc.isConnecting && (
-              <div className="mt-4 text-center text-muted-foreground text-sm">
-                Bağlanıyor...
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {/* WebRTC Call Modal (Teams/Discord style popup) */}
+      <CallModal
+        isOpen={(webrtc.isCallActive || webrtc.isConnecting) && !!activeCallType && !!matchUser}
+        onClose={() => {
+          webrtc.endCall();
+          setActiveCallType(null);
+        }}
+        callType={activeCallType || "voice"}
+        isConnecting={webrtc.isConnecting}
+        isCallActive={webrtc.isCallActive}
+        isMuted={webrtc.isMuted}
+        isVideoOff={webrtc.isVideoOff}
+        localStream={webrtc.localStream}
+        remoteStream={webrtc.remoteStream}
+        localVideoRef={webrtc.localVideoRef}
+        remoteVideoRef={webrtc.remoteVideoRef}
+        onToggleMute={webrtc.toggleMute}
+        onToggleVideo={webrtc.toggleVideo}
+        onEndCall={() => {
+          webrtc.endCall();
+          setActiveCallType(null);
+        }}
+        otherUserName={matchUser?.username || "Kullanıcı"}
+        otherUserAvatar={matchUser?.avatar_url || null}
+        error={webrtc.error}
+      />
     </div>
   );
 }
