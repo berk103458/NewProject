@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { createSupabaseClient } from "@/lib/supabase/client";
 
 interface UseWebRTCOptions {
@@ -39,14 +39,17 @@ export function useWebRTC({
   const handleSignalingMessageRef = useRef<((message: SignalingMessage) => Promise<void>) | null>(null);
   const supabase = createSupabaseClient();
 
-  // STUN servers (free, public)
-  const iceServers: RTCConfiguration = {
-    iceServers: [
-      { urls: "stun:stun.l.google.com:19302" },
-      { urls: "stun:stun1.l.google.com:19302" },
-      // TURN server eklenebilir (opsiyonel, ücretli servisler gerekebilir)
-    ],
-  };
+  // STUN servers (free, public) - memoized to avoid recreating on every render
+  const iceServers: RTCConfiguration = useMemo(
+    () => ({
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun1.l.google.com:19302" },
+        // TURN server eklenebilir (opsiyonel, ücretli servisler gerekebilir)
+      ],
+    }),
+    []
+  );
 
   // Send signaling message via Supabase Realtime
   const sendSignalingMessage = useCallback(
@@ -103,7 +106,7 @@ export function useWebRTC({
 
     peerConnectionRef.current = pc;
     return pc;
-  }, [userId, otherUserId, sendSignalingMessage]);
+  }, [userId, otherUserId, sendSignalingMessage, iceServers]);
 
   // Setup signaling channel
   const setupSignaling = useCallback(() => {
