@@ -1,0 +1,56 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 139 70% 58%;
+    --primary-foreground: 0 0% 3.9%;
+    --secondary: 0 0% 14.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 14.9%;
+    --muted-foreground: 0 0% 63.9%;
+    --accent: 262 83% 58%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 14.9%;
+    --input: 0 0% 14.9%;
+    --ring: 262 83% 58%;
+    --radius: 0.5rem;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* Custom GamerMatch Styles */
+@layer utilities {
+  .neon-glow-purple {
+    box-shadow: 0 0 10px rgba(139, 92, 246, 0.5),
+                0 0 20px rgba(139, 92, 246, 0.3),
+                0 0 30px rgba(139, 92, 246, 0.2);
+  }
+  
+  .neon-glow-green {
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.5),
+                0 0 20px rgba(16, 185, 129, 0.3),
+                0 0 30px rgba(16, 185, 129, 0.2);
+  }
+}
+

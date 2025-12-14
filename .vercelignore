@@ -1,0 +1,13 @@
+node_modules
+.next
+.env.local
+.env*.local
+*.log
+.DS_Store
+.vscode
+.idea
+supabase
+scripts
+*.md
+!README.md
+
