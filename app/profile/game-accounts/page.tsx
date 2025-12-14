@@ -45,16 +45,17 @@ export default function GameAccountsPage() {
   const [gameTag, setGameTag] = useState("");
   const [region, setRegion] = useState("TR");
   const supabase = createSupabaseClient();
-  const { user } = useAuthStore();
+  const { user, loading: authLoading } = useAuthStore();
 
   useEffect(() => {
+    if (authLoading) return; // Wait for auth to load
     if (!user) {
       router.push("/auth/login");
       return;
     }
     loadAccounts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user, authLoading]);
 
   const loadAccounts = async () => {
     if (!user) return;

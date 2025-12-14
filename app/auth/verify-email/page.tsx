@@ -15,11 +15,12 @@ export default function VerifyEmailPage() {
   const [resending, setResending] = useState(false);
   const [message, setMessage] = useState("");
   const supabase = createSupabaseClient();
-  const { user } = useAuthStore();
+  const { user, loading: authLoading } = useAuthStore();
 
   useEffect(() => {
     // Check if email is already confirmed
     const checkEmailStatus = async () => {
+      if (authLoading) return; // Wait for auth to load
       if (!user) {
         router.push("/auth/login");
         return;
@@ -49,7 +50,7 @@ export default function VerifyEmailPage() {
     };
 
     checkEmailStatus();
-  }, [user, router, supabase]);
+  }, [user, authLoading, router, supabase]);
 
   const resendConfirmationEmail = async () => {
     if (!user?.email) return;

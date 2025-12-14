@@ -49,16 +49,17 @@ export default function GameAccountDetailPage() {
   const [recentMatches, setRecentMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
   const supabase = createSupabaseClient();
-  const { user } = useAuthStore();
+  const { user, loading: authLoading } = useAuthStore();
 
   useEffect(() => {
+    if (authLoading) return; // Wait for auth to load
     if (!user) {
       router.push("/auth/login");
       return;
     }
     loadAccountDetails();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accountId, user]);
+  }, [accountId, user, authLoading]);
 
   const loadAccountDetails = async () => {
     if (!user) return;

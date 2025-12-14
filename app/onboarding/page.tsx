@@ -18,7 +18,7 @@ export default function OnboardingPage() {
   const [loading, setLoading] = useState(false);
   const [checkingEmail, setCheckingEmail] = useState(true);
   const supabase = createSupabaseClient();
-  const { user } = useAuthStore();
+  const { user, loading: authLoading } = useAuthStore();
 
   const {
     selectedGame,
@@ -34,6 +34,7 @@ export default function OnboardingPage() {
   // Check if email is confirmed and if onboarding is already completed
   useEffect(() => {
     const checkEmailConfirmation = async () => {
+      if (authLoading) return; // Wait for auth to load
       if (!user) {
         router.push("/auth/login");
         return;

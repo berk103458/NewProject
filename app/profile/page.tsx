@@ -19,16 +19,17 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [gameProfile, setGameProfile] = useState<any>(null);
   const supabase = createSupabaseClient();
-  const { user, setUser } = useAuthStore();
+  const { user, setUser, loading: authLoading } = useAuthStore();
 
   useEffect(() => {
+    if (authLoading) return; // Wait for auth to load
     if (!user) {
       router.push("/onboarding");
       return;
     }
     loadProfile();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user, authLoading]);
 
   const loadProfile = async () => {
     if (!user) return;
