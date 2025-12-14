@@ -33,6 +33,36 @@ export async function middleware(req: NextRequest) {
   );
 
   await supabase.auth.getSession();
+
+  // Add Content Security Policy headers
+  // Note: 'unsafe-eval' is needed for Next.js development mode and some libraries
+  // In production, you can remove 'unsafe-eval' if not needed
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  const scriptSrc = isDevelopment
+    ? "'self' 'unsafe-eval' 'unsafe-inline' https://*.supabase.co"
+    : "'self' 'unsafe-inline' https://*.supabase.co";
+
+  const cspHeader = `
+    default-src 'self';
+    script-src ${scriptSrc};
+    style-src 'self' 'unsafe-inline';
+    img-src 'self' blob: data: https://*.supabase.co https://*.supabase.in;
+    font-src 'self' data:;
+    connect-src 'self' https://*.supabase.co https://*.supabase.in wss://*.supabase.co;
+    media-src 'self' blob:;
+    object-src 'none';
+    base-uri 'self';
+    form-action 'self';
+    frame-ancestors 'none';
+    upgrade-insecure-requests;
+  `.replace(/\s{2,}/g, ' ').trim();
+
+  res.headers.set('Content-Security-Policy', cspHeader);
+  res.headers.set('X-Content-Type-Options', 'nosniff');
+  res.headers.set('X-Frame-Options', 'DENY');
+  res.headers.set('X-XSS-Protection', '1; mode=block');
+  res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+
   return res;
 }
 

@@ -106,6 +106,7 @@ export function useWebRTC({
 
     peerConnectionRef.current = pc;
     return pc;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, otherUserId, sendSignalingMessage, iceServers]);
 
   // Setup signaling channel
