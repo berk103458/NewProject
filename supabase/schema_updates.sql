@@ -5,7 +5,7 @@
 
 -- Add credits and is_admin to profiles
 ALTER TABLE public.profiles 
-ADD COLUMN IF NOT EXISTS credits INTEGER DEFAULT 1 CHECK (credits >= 0),
+ADD COLUMN IF NOT EXISTS credits INTEGER DEFAULT 5 CHECK (credits >= 0),
 ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE;
 
 -- Update existing users to have at least 5 credits

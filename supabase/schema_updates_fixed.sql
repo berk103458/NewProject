@@ -7,11 +7,11 @@
 
 -- Add credits and is_admin to profiles
 ALTER TABLE public.profiles 
-ADD COLUMN IF NOT EXISTS credits INTEGER DEFAULT 1 CHECK (credits >= 0),
+ADD COLUMN IF NOT EXISTS credits INTEGER DEFAULT 5 CHECK (credits >= 0),
 ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE;
 
--- Update existing users to have 1 credit
-UPDATE public.profiles SET credits = 1 WHERE credits IS NULL OR credits = 0;
+-- Update existing users to have at least 5 credits (if they have less)
+UPDATE public.profiles SET credits = 5 WHERE credits IS NULL OR credits < 5;
 
 -- Create credits_transactions table for credit history
 CREATE TABLE IF NOT EXISTS public.credits_transactions (
