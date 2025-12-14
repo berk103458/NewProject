@@ -35,12 +35,25 @@ export default function MatchesPage() {
   const { user, loading: authLoading } = useAuthStore();
 
   useEffect(() => {
+    let mounted = true;
+    let hasRedirected = false;
+
     if (authLoading) return;
     if (!user) {
-      router.push("/auth/login");
+      if (mounted && !hasRedirected && window.location.pathname !== "/auth/login") {
+        hasRedirected = true;
+        router.replace("/auth/login");
+      }
       return;
     }
-    loadMatches();
+    
+    if (mounted) {
+      loadMatches();
+    }
+
+    return () => {
+      mounted = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, authLoading]);
 

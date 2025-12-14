@@ -48,12 +48,25 @@ export default function GameAccountsPage() {
   const { user, loading: authLoading } = useAuthStore();
 
   useEffect(() => {
+    let mounted = true;
+    let hasRedirected = false;
+
     if (authLoading) return; // Wait for auth to load
     if (!user) {
-      router.push("/auth/login");
+      if (mounted && !hasRedirected && window.location.pathname !== "/auth/login") {
+        hasRedirected = true;
+        router.replace("/auth/login");
+      }
       return;
     }
-    loadAccounts();
+    
+    if (mounted) {
+      loadAccounts();
+    }
+
+    return () => {
+      mounted = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, authLoading]);
 

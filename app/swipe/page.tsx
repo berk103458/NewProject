@@ -23,11 +23,15 @@ export default function SwipePage() {
 
   useEffect(() => {
     let mounted = true;
+    let hasRedirected = false;
     
     if (authLoading) return;
 
     if (!user) {
-      router.push("/onboarding");
+      if (mounted && !hasRedirected && window.location.pathname !== "/onboarding") {
+        hasRedirected = true;
+        router.replace("/onboarding");
+      }
       return;
     }
     

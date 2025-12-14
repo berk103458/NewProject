@@ -41,12 +41,35 @@ export default function AdminPage() {
   const { user } = useAuthStore();
 
   useEffect(() => {
-    checkAdminAccess();
-  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
+    let mounted = true;
+    let hasRedirected = false;
+
+    if (authLoading) return; // Wait for auth to load
+    
+    const checkAccess = async () => {
+      if (!user) {
+        if (mounted && !hasRedirected && window.location.pathname !== "/auth/login") {
+          hasRedirected = true;
+          router.replace("/auth/login");
+        }
+        return;
+      }
+      
+      if (mounted) {
+        await checkAdminAccess();
+      }
+    };
+
+    checkAccess();
+
+    return () => {
+      mounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, authLoading]);
 
   const checkAdminAccess = async () => {
     if (!user) {
-      router.push("/auth/login");
       return;
     }
 
@@ -60,7 +83,9 @@ export default function AdminPage() {
       if (error) throw error;
 
       if (!profile?.is_admin) {
-        router.push("/");
+        if (window.location.pathname !== "/") {
+          router.replace("/");
+        }
         return;
       }
 
@@ -68,7 +93,9 @@ export default function AdminPage() {
       loadUsers();
     } catch (error) {
       console.error("Error checking admin:", error);
-      router.push("/");
+      if (window.location.pathname !== "/") {
+        router.replace("/");
+      }
     }
   };
 

@@ -18,11 +18,17 @@ export default function VerifyEmailPage() {
   const { user, loading: authLoading } = useAuthStore();
 
   useEffect(() => {
+    let mounted = true;
+    let hasRedirected = false;
+
     // Check if email is already confirmed
     const checkEmailStatus = async () => {
-      if (authLoading) return; // Wait for auth to load
+      if (authLoading || hasRedirected) return; // Wait for auth to load or prevent multiple redirects
       if (!user) {
-        router.push("/auth/login");
+        if (mounted && !hasRedirected && window.location.pathname !== "/auth/login") {
+          hasRedirected = true;
+          router.replace("/auth/login");
+        }
         return;
       }
 
@@ -38,10 +44,12 @@ export default function VerifyEmailPage() {
             .single();
 
           // If onboarding is completed, go to swipe, otherwise go to onboarding
-          if (gameProfile) {
-            router.push("/swipe");
-          } else {
-            router.push("/onboarding");
+          if (mounted && !hasRedirected) {
+            hasRedirected = true;
+            const targetPath = gameProfile ? "/swipe" : "/onboarding";
+            if (window.location.pathname !== targetPath) {
+              router.replace(targetPath);
+            }
           }
         }
       } catch (error) {
@@ -50,7 +58,12 @@ export default function VerifyEmailPage() {
     };
 
     checkEmailStatus();
-  }, [user, authLoading, router, supabase]);
+
+    return () => {
+      mounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, authLoading]);
 
   const resendConfirmationEmail = async () => {
     if (!user?.email) return;

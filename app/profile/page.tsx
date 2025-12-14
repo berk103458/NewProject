@@ -22,12 +22,25 @@ export default function ProfilePage() {
   const { user, setUser, loading: authLoading } = useAuthStore();
 
   useEffect(() => {
+    let mounted = true;
+    let hasRedirected = false;
+
     if (authLoading) return; // Wait for auth to load
     if (!user) {
-      router.push("/onboarding");
+      if (mounted && !hasRedirected && window.location.pathname !== "/onboarding") {
+        hasRedirected = true;
+        router.replace("/onboarding");
+      }
       return;
     }
-    loadProfile();
+    
+    if (mounted) {
+      loadProfile();
+    }
+
+    return () => {
+      mounted = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, authLoading]);
 

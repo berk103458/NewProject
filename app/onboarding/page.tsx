@@ -33,10 +33,16 @@ export default function OnboardingPage() {
 
   // Check if email is confirmed and if onboarding is already completed
   useEffect(() => {
+    let mounted = true;
+    let hasRedirected = false;
+
     const checkEmailConfirmation = async () => {
-      if (authLoading) return; // Wait for auth to load
+      if (authLoading || hasRedirected) return; // Wait for auth to load or prevent multiple redirects
       if (!user) {
-        router.push("/auth/login");
+        if (mounted && !hasRedirected) {
+          hasRedirected = true;
+          router.replace("/auth/login");
+        }
         return;
       }
 
@@ -44,14 +50,20 @@ export default function OnboardingPage() {
         const { data: { user: currentUser } } = await supabase.auth.getUser();
         
         if (!currentUser) {
-          router.push("/auth/login");
+          if (mounted && !hasRedirected) {
+            hasRedirected = true;
+            router.replace("/auth/login");
+          }
           return;
         }
 
         // Check if email is confirmed
         if (!currentUser.email_confirmed_at) {
           // Email not confirmed, redirect to verification page
-          router.push("/auth/verify-email");
+          if (mounted && !hasRedirected && window.location.pathname !== "/auth/verify-email") {
+            hasRedirected = true;
+            router.replace("/auth/verify-email");
+          }
           return;
         }
 
@@ -79,19 +91,32 @@ export default function OnboardingPage() {
         const allowOnboarding = urlParams.get("change_game") === "true";
 
         if ((hasGameProfile || hasAnsweredQuestions) && !allowOnboarding) {
-          router.push("/swipe");
+          if (mounted && !hasRedirected && window.location.pathname !== "/swipe") {
+            hasRedirected = true;
+            router.replace("/swipe");
+          }
           return;
         }
 
-        setCheckingEmail(false);
+        if (mounted) {
+          setCheckingEmail(false);
+        }
       } catch (error) {
         console.error("Error checking email:", error);
-        router.push("/auth/login");
+        if (mounted && !hasRedirected) {
+          hasRedirected = true;
+          router.replace("/auth/login");
+        }
       }
     };
 
     checkEmailConfirmation();
-  }, [user, router, supabase]);
+
+    return () => {
+      mounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, authLoading]);
 
   const handleGameSelect = (gameId: string) => {
     setSelectedGame(gameId);
