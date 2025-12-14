@@ -6,6 +6,7 @@ interface UseWebRTCOptions {
   userId: string;
   otherUserId: string;
   callType: "voice" | "video";
+  enabled?: boolean; // Only enable WebRTC when both users are ready
   onCallEnd?: () => void;
 }
 
@@ -21,6 +22,7 @@ export function useWebRTC({
   userId,
   otherUserId,
   callType,
+  enabled = true,
   onCallEnd,
 }: UseWebRTCOptions) {
   const [isCallActive, setIsCallActive] = useState(false);
@@ -237,6 +239,10 @@ export function useWebRTC({
 
   // Start call (initiator)
   const startCall = useCallback(async () => {
+    if (!enabled || !userId || !otherUserId) {
+      setError("Kullanıcı bilgileri eksik");
+      return;
+    }
     try {
       setError(null);
       setIsConnecting(true);
@@ -291,10 +297,14 @@ export function useWebRTC({
         endCallRef.current();
       }
     }
-  }, [callType, userId, otherUserId, createPeerConnection, setupSignaling, sendSignalingMessage]);
+  }, [enabled, callType, userId, otherUserId, createPeerConnection, setupSignaling, sendSignalingMessage]);
 
   // Answer call (receiver)
   const answerCall = useCallback(async () => {
+    if (!enabled || !userId || !otherUserId) {
+      setError("Kullanıcı bilgileri eksik");
+      return;
+    }
     try {
       setError(null);
       setIsConnecting(true);
@@ -335,33 +345,61 @@ export function useWebRTC({
         endCallRef.current();
       }
     }
-  }, [callType, createPeerConnection, setupSignaling]);
+  }, [enabled, callType, userId, otherUserId, createPeerConnection, setupSignaling]);
 
   // End call
   const endCall = useCallback(() => {
+    console.log("Ending call, cleaning up...");
+    
+    // Send call-end signal to other user
+    if (userId && otherUserId && signalingChannelRef.current) {
+      try {
+        sendSignalingMessage({
+          type: "call-end",
+          data: {},
+          from: userId,
+          to: otherUserId,
+        });
+      } catch (err) {
+        console.warn("Failed to send call-end signal:", err);
+      }
+    }
+
     // Stop local stream
     if (localStream) {
-      localStream.getTracks().forEach((track) => track.stop());
+      localStream.getTracks().forEach((track) => {
+        track.stop();
+        track.enabled = false;
+      });
       setLocalStream(null);
+    }
+
+    // Stop remote stream
+    if (remoteStream) {
+      remoteStream.getTracks().forEach((track) => {
+        track.stop();
+        track.enabled = false;
+      });
+      setRemoteStream(null);
     }
 
     // Close peer connection
     if (peerConnectionRef.current) {
-      peerConnectionRef.current.close();
+      try {
+        peerConnectionRef.current.close();
+      } catch (err) {
+        console.warn("Error closing peer connection:", err);
+      }
       peerConnectionRef.current = null;
     }
 
-    // Send call-end signal
-    sendSignalingMessage({
-      type: "call-end",
-      data: {},
-      from: userId,
-      to: otherUserId,
-    });
-
     // Cleanup signaling channel
     if (signalingChannelRef.current) {
-      supabase.removeChannel(signalingChannelRef.current);
+      try {
+        supabase.removeChannel(signalingChannelRef.current);
+      } catch (err) {
+        console.warn("Error removing signaling channel:", err);
+      }
       signalingChannelRef.current = null;
     }
 
@@ -370,6 +408,8 @@ export function useWebRTC({
     setIsConnecting(false);
     setRemoteStream(null);
     setError(null);
+    setIsMuted(false);
+    setIsVideoOff(false);
 
     if (localVideoRef.current) {
       localVideoRef.current.srcObject = null;
@@ -379,7 +419,8 @@ export function useWebRTC({
     }
 
     onCallEnd?.();
-  }, [localStream, userId, otherUserId, sendSignalingMessage, onCallEnd, supabase]);
+    console.log("Call ended, cleanup complete");
+  }, [localStream, remoteStream, userId, otherUserId, sendSignalingMessage, onCallEnd, supabase]);
 
   // Update refs
   useEffect(() => {
@@ -410,12 +451,36 @@ export function useWebRTC({
     }
   }, [localStream, isVideoOff]);
 
-  // Cleanup on unmount
+  // Cleanup on unmount or when disabled
   useEffect(() => {
+    if (!enabled || !userId || !otherUserId) {
+      // Cleanup if disabled
+      if (localStream) {
+        localStream.getTracks().forEach((track) => track.stop());
+        setLocalStream(null);
+      }
+      if (remoteStream) {
+        remoteStream.getTracks().forEach((track) => track.stop());
+        setRemoteStream(null);
+      }
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();
+        peerConnectionRef.current = null;
+      }
+      if (signalingChannelRef.current) {
+        supabase.removeChannel(signalingChannelRef.current);
+        signalingChannelRef.current = null;
+      }
+      setIsCallActive(false);
+      setIsConnecting(false);
+      setError(null);
+    }
+
     return () => {
+      // Cleanup on unmount
       endCall();
     };
-  }, [endCall]);
+  }, [enabled, userId, otherUserId, endCall, localStream, remoteStream, supabase]);
 
   return {
     isCallActive,

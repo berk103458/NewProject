@@ -63,13 +63,14 @@ export default function ChatPage() {
   const supabase = createSupabaseClient();
   const { user, loading: authLoading } = useAuthStore();
 
-  // WebRTC hook
+  // WebRTC hook - only initialize when we have both users
   const otherUserId = matchUser?.id || "";
   const webrtc = useWebRTC({
     matchId,
     userId: user?.id || "",
     otherUserId,
     callType: activeCallType || "voice",
+    enabled: !!user?.id && !!otherUserId && !!matchUser, // Only enable when both users are ready
     onCallEnd: () => {
       setActiveCallType(null);
       setIsInitiator(false);
@@ -82,6 +83,14 @@ export default function ChatPage() {
       setLoading(false);
       return;
     }
+    
+    // Cleanup call state on page load/refresh
+    setActiveCallType(null);
+    setIsInitiator(false);
+    setIncomingRequest(null);
+    setPendingOutgoingRequest(null);
+    setRequestingType(null);
+    
     loadChat();
     
     const unsubscribe = subscribeToMessages();
@@ -90,6 +99,9 @@ export default function ChatPage() {
       if (unsubscribe) {
         unsubscribe();
       }
+      // Cleanup call state on unmount
+      setActiveCallType(null);
+      setIsInitiator(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matchId, user, authLoading]);
@@ -273,13 +285,17 @@ export default function ChatPage() {
           }
           if (newReq.status === "accepted" && newReq.requester_id === user.id) {
             // Arama kabul edildi, WebRTC başlat
-            setActiveCallType(newReq.type);
-            setIsInitiator(true);
-            setRequestingType(null);
-            setPendingOutgoingRequest(null);
-            setTimeout(() => {
-              webrtc.startCall();
-            }, 100);
+            if (matchUser?.id) {
+              setActiveCallType(newReq.type);
+              setIsInitiator(true);
+              setRequestingType(null);
+              setPendingOutgoingRequest(null);
+              setTimeout(() => {
+                if (matchUser?.id) {
+                  webrtc.startCall();
+                }
+              }, 500); // Wait a bit more for state to settle
+            }
           }
           if (newReq.status === "rejected" && newReq.requester_id === user.id) {
             alert("Arama isteğin reddedildi.");
@@ -469,12 +485,16 @@ export default function ChatPage() {
       }
       if (accept) {
         // Arama kabul edildi, WebRTC başlat (receiver olarak)
-        setActiveCallType(req.type);
-        setIsInitiator(false);
-        setPendingOutgoingRequest(null);
-        setTimeout(() => {
-          webrtc.answerCall();
-        }, 100);
+        if (matchUser?.id) {
+          setActiveCallType(req.type);
+          setIsInitiator(false);
+          setPendingOutgoingRequest(null);
+          setTimeout(() => {
+            if (matchUser?.id) {
+              webrtc.answerCall();
+            }
+          }, 500); // Wait a bit more for state to settle
+        }
       }
       setIncomingRequest(null);
     } catch (error) {
@@ -718,31 +738,33 @@ export default function ChatPage() {
       </div>
 
       {/* WebRTC Call Modal (Teams/Discord style popup) */}
-      <CallModal
-        isOpen={(webrtc.isCallActive || webrtc.isConnecting) && !!activeCallType && !!matchUser}
-        onClose={() => {
-          webrtc.endCall();
-          setActiveCallType(null);
-        }}
-        callType={activeCallType || "voice"}
-        isConnecting={webrtc.isConnecting}
-        isCallActive={webrtc.isCallActive}
-        isMuted={webrtc.isMuted}
-        isVideoOff={webrtc.isVideoOff}
-        localStream={webrtc.localStream}
-        remoteStream={webrtc.remoteStream}
-        localVideoRef={webrtc.localVideoRef}
-        remoteVideoRef={webrtc.remoteVideoRef}
-        onToggleMute={webrtc.toggleMute}
-        onToggleVideo={webrtc.toggleVideo}
-        onEndCall={() => {
-          webrtc.endCall();
-          setActiveCallType(null);
-        }}
-        otherUserName={matchUser?.username || "Kullanıcı"}
-        otherUserAvatar={matchUser?.avatar_url || null}
-        error={webrtc.error}
-      />
+      {matchUser && (
+        <CallModal
+          isOpen={(webrtc.isCallActive || webrtc.isConnecting) && !!activeCallType}
+          onClose={() => {
+            webrtc.endCall();
+            setActiveCallType(null);
+          }}
+          callType={activeCallType || "voice"}
+          isConnecting={webrtc.isConnecting}
+          isCallActive={webrtc.isCallActive}
+          isMuted={webrtc.isMuted}
+          isVideoOff={webrtc.isVideoOff}
+          localStream={webrtc.localStream}
+          remoteStream={webrtc.remoteStream}
+          localVideoRef={webrtc.localVideoRef}
+          remoteVideoRef={webrtc.remoteVideoRef}
+          onToggleMute={webrtc.toggleMute}
+          onToggleVideo={webrtc.toggleVideo}
+          onEndCall={() => {
+            webrtc.endCall();
+            setActiveCallType(null);
+          }}
+          otherUserName={matchUser.username}
+          otherUserAvatar={matchUser.avatar_url}
+          error={webrtc.error}
+        />
+      )}
     </div>
   );
 }
