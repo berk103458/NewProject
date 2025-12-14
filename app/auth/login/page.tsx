@@ -27,35 +27,36 @@ export default function LoginPage() {
       const authData = await signIn(email, password);
       
       if (authData?.user) {
-        // Check if user has already completed onboarding (either has a game profile or answered behavior questions)
-        const [{ data: gameProfiles }, { data: profile }] = await Promise.all([
-          supabase
-            .from("user_game_profiles")
-            .select("id")
-            .eq("user_id", authData.user.id)
-            .limit(1),
-          supabase
-            .from("profiles")
-            .select("personality_tags, play_style")
-            .eq("id", authData.user.id)
-            .single(),
-        ]);
+        // Optimized: Single query with LEFT JOIN instead of 2 separate queries
+        // This reduces database round trips from 2 to 1
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select(`
+            personality_tags,
+            play_style,
+            user_game_profiles(id)
+          `)
+          .eq("id", authData.user.id)
+          .maybeSingle();
 
-        const hasGameProfile = (gameProfiles?.length || 0) > 0;
+        // If no profile found or error, user needs onboarding
+        if (profileError || !profile) {
+          router.push("/onboarding");
+          return;
+        }
+
+        const hasGameProfile = (profile?.user_game_profiles?.length || 0) > 0;
         const hasAnsweredQuestions =
           (profile?.personality_tags?.length || 0) > 0 && !!profile?.play_style;
 
-        if (hasGameProfile || hasAnsweredQuestions) {
-          router.push("/swipe");
-        } else {
-          router.push("/onboarding");
-        }
+        // Fast redirect - no need to wait for loading state
+        router.push(hasGameProfile || hasAnsweredQuestions ? "/swipe" : "/onboarding");
       }
     } catch (err: any) {
       setError(err.message || "Giriş yapılamadı");
-    } finally {
       setLoading(false);
     }
+    // Note: Don't set loading to false on success - let navigation handle it
   };
 
   return (

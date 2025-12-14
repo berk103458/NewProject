@@ -33,18 +33,35 @@ export function useAuth() {
   useEffect(() => {
     let mounted = true;
 
-    // Get initial session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (mounted) {
-        setUser(session?.user ?? null);
-        setLoading(false);
+    // Get initial session - use cached session if available for faster load
+    const initAuth = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (mounted) {
+          if (error) {
+            console.warn("Session error:", error);
+            setUser(null);
+          } else {
+            setUser(session?.user ?? null);
+          }
+          setLoading(false);
 
-        // Touch last_seen for online status (debounced)
-        if (session?.user) {
-          updateLastSeen(session.user.id);
+          // Touch last_seen for online status (debounced)
+          if (session?.user) {
+            updateLastSeen(session.user.id);
+          }
+        }
+      } catch (error) {
+        console.error("Auth init error:", error);
+        if (mounted) {
+          setUser(null);
+          setLoading(false);
         }
       }
-    });
+    };
+
+    initAuth();
 
     // Listen for auth changes
     const {
