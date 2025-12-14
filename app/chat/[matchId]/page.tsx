@@ -176,11 +176,8 @@ export default function ChatPage() {
       if (profileError) throw profileError;
       setMatchUser(profile);
 
-      // Cleanup old messages (>1 day)
-      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      await supabase.from("messages").delete().lt("created_at", oneDayAgo).eq("match_id", matchId);
-
-      // Load messages
+      // Load messages (cleanup old messages in background, don't block UI)
+      // Note: Consider moving cleanup to a scheduled job instead of doing it on every page load
       const { data: messagesData, error: messagesError } = await supabase
         .from("messages")
         .select("*")

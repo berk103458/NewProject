@@ -69,38 +69,52 @@ export default function MatchesPage() {
         if (!uniqueMap.has(key)) uniqueMap.set(key, m);
       });
 
-      // Get user profiles for matches
-      const matchesWithProfiles = await Promise.all(
-        Array.from(uniqueMap.values()).map(async (match) => {
-          const otherUserId = match.user_id_1 === user.id ? match.user_id_2 : match.user_id_1;
-          
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("id, username, avatar_url, riot_id, bio")
-            .eq("id", otherUserId)
-            .single();
-
-          // Get unread message count
-          const { count: unreadCount } = await supabase
-            .from("messages")
-            .select("*", { count: "exact", head: true })
-            .eq("match_id", match.id)
-            .eq("read", false)
-            .neq("sender_id", user.id);
-
-          return {
-            ...match,
-            matched_user: profile || {
-              id: otherUserId,
-              username: "Unknown",
-              avatar_url: null,
-              riot_id: null,
-              bio: null,
-            },
-            unread_count: unreadCount || 0,
-          };
-        })
+      const uniqueMatches = Array.from(uniqueMap.values());
+      const otherUserIds = uniqueMatches.map(
+        (match) => (match.user_id_1 === user.id ? match.user_id_2 : match.user_id_1)
       );
+      const matchIds = uniqueMatches.map((m) => m.id);
+
+      // Batch fetch all profiles
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, username, avatar_url, riot_id, bio")
+        .in("id", otherUserIds);
+
+      const profileMap = new Map(
+        (profiles || []).map((p) => [p.id, p])
+      );
+
+      // Batch fetch all unread counts
+      const { data: unreadMessages } = await supabase
+        .from("messages")
+        .select("match_id")
+        .in("match_id", matchIds)
+        .eq("read", false)
+        .neq("sender_id", user.id);
+
+      const unreadCounts = new Map<string, number>();
+      unreadMessages?.forEach((msg) => {
+        unreadCounts.set(msg.match_id, (unreadCounts.get(msg.match_id) || 0) + 1);
+      });
+
+      // Combine data
+      const matchesWithProfiles = uniqueMatches.map((match) => {
+        const otherUserId = match.user_id_1 === user.id ? match.user_id_2 : match.user_id_1;
+        const profile = profileMap.get(otherUserId);
+
+        return {
+          ...match,
+          matched_user: profile || {
+            id: otherUserId,
+            username: "Unknown",
+            avatar_url: null,
+            riot_id: null,
+            bio: null,
+          },
+          unread_count: unreadCounts.get(match.id) || 0,
+        };
+      });
 
       setMatches(matchesWithProfiles);
     } catch (error) {

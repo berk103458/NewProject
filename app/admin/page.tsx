@@ -97,29 +97,41 @@ export default function AdminPage() {
 
       if (error) throw error;
 
-      // Get additional data for each user
+      const userIds = (data || []).map((u) => u.id);
+
+      // Batch fetch match counts
+      const { data: allMatches } = await supabase
+        .from("matches")
+        .select("user_id_1, user_id_2")
+        .eq("status", "matched")
+        .or(userIds.map((id) => `user_id_1.eq.${id},user_id_2.eq.${id}`).join(","));
+
+      const matchCounts = new Map<string, number>();
+      allMatches?.forEach((match) => {
+        matchCounts.set(match.user_id_1, (matchCounts.get(match.user_id_1) || 0) + 1);
+        matchCounts.set(match.user_id_2, (matchCounts.get(match.user_id_2) || 0) + 1);
+      });
+
+      // Batch fetch message counts
+      const { data: allMessages } = await supabase
+        .from("messages")
+        .select("sender_id")
+        .in("sender_id", userIds);
+
+      const messageCounts = new Map<string, number>();
+      allMessages?.forEach((msg) => {
+        messageCounts.set(msg.sender_id, (messageCounts.get(msg.sender_id) || 0) + 1);
+      });
+
+      // Get emails in parallel (but limit concurrent requests)
       const usersWithDetails = await Promise.all(
         (data || []).map(async (u) => {
-          // Get match count
-          const { count: matchCount } = await supabase
-            .from("matches")
-            .select("*", { count: "exact", head: true })
-            .or(`user_id_1.eq.${u.id},user_id_2.eq.${u.id}`)
-            .eq("status", "matched");
-
-          // Get message count
-          const { count: messageCount } = await supabase
-            .from("messages")
-            .select("*", { count: "exact", head: true })
-            .eq("sender_id", u.id);
-
-          // Try to get email from API (requires service role key)
           let email = "N/A";
           try {
             const response = await fetch(`/api/admin/users/${u.id}`);
             if (response.ok) {
-              const data = await response.json();
-              email = data.email || "N/A";
+              const emailData = await response.json();
+              email = emailData.email || "N/A";
             }
           } catch {
             // API not available, use N/A
@@ -129,8 +141,8 @@ export default function AdminPage() {
           return {
             ...u,
             email,
-            match_count: matchCount || 0,
-            message_count: messageCount || 0,
+            match_count: matchCounts.get(u.id) || 0,
+            message_count: messageCounts.get(u.id) || 0,
           };
         })
       );

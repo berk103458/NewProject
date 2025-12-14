@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useSwipeStore, UserCard } from "@/lib/store/useSwipeStore";
 import { useAuthStore } from "@/lib/store/useAuthStore";
@@ -77,10 +77,16 @@ export default function SwipePage() {
       query = query.lt("toxicity_score", 70);
     }
 
-    if (excludedIdsArray.length > 0) {
+    // Optimize: Apply exclusion filter efficiently
+    // For small lists, use .neq() chain; for larger lists, filter client-side
+    if (excludedIdsArray.length > 0 && excludedIdsArray.length <= 50) {
+      // Chain .neq() for reasonable number of exclusions
       excludedIdsArray.forEach((excludedId) => {
         query = query.neq("id", excludedId);
       });
+    } else if (excludedIdsArray.length > 50) {
+      // For large exclusion lists, fetch more and filter client-side
+      query = query.limit(100);
     }
 
     if (checkPersonality) {
@@ -92,13 +98,18 @@ export default function SwipePage() {
     }
 
     // Prefer a small random set
-    query = query.order("updated_at", { ascending: false }).limit(20);
+    const limit = excludedIdsArray.length > 50 ? 100 : 20;
+    query = query.order("updated_at", { ascending: false }).limit(limit);
 
     const { data: users, error } = await query;
     if (error) throw error;
 
+    // Filter out excluded IDs client-side if needed
+    const excludedSet = new Set(excludedIdsArray);
+    const filteredUsers = users?.filter((u: any) => !excludedSet.has(u.id)) || [];
+
     const userCards: UserCard[] =
-      users?.map((u: any) => ({
+      filteredUsers.slice(0, 20).map((u: any) => ({
         id: u.id,
         username: u.username,
         avatar_url: u.avatar_url,
@@ -175,7 +186,7 @@ export default function SwipePage() {
     }
   };
 
-  const handleSwipe = async (direction: "left" | "right") => {
+  const handleSwipe = useCallback(async (direction: "left" | "right") => {
     const currentUser = currentUsers[currentIndex];
     if (!currentUser || !user) return;
 
@@ -259,16 +270,21 @@ export default function SwipePage() {
       console.error("Error swiping:", error);
       setSwiping(false);
     }
-  };
+  }, [currentUsers, currentIndex, user, supabase, router, swipeUser, nextUser]);
 
-  const handleButtonSwipe = (direction: "left" | "right") => {
+  const handleButtonSwipe = useCallback((direction: "left" | "right") => {
     if (swiping) return;
     setOffset({ x: direction === "right" ? 500 : -500, y: 0 });
     setRotation(direction === "right" ? 30 : -30);
     setTimeout(() => handleSwipe(direction), 200);
-  };
+  }, [swiping, handleSwipe]);
 
-  const currentUser = currentUsers[currentIndex];
+  const currentUser = useMemo(() => currentUsers[currentIndex], [currentUsers, currentIndex]);
+  
+  const visibleCards = useMemo(() => 
+    currentUsers.slice(currentIndex, currentIndex + 2),
+    [currentUsers, currentIndex]
+  );
 
   if (loading) {
     return (
@@ -307,7 +323,7 @@ export default function SwipePage() {
         )}
         {/* Card Stack */}
         <div className="absolute inset-0">
-          {currentUsers.slice(currentIndex, currentIndex + 2).map((user, idx) => (
+          {visibleCards.map((user, idx) => (
             <div
               key={user.id}
               className="absolute inset-0"

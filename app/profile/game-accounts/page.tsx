@@ -72,24 +72,30 @@ export default function GameAccountsPage() {
 
       if (error) throw error;
 
-      // Load statistics for each account
-      const accountsWithStats = await Promise.all(
-        (data || []).map(async (acc: any) => {
-          const { data: stats } = await supabase
-            .from("game_statistics")
-            .select("*")
-            .eq("game_account_id", acc.id)
-            .order("updated_at", { ascending: false })
-            .limit(1)
-            .single();
+      const accountIds = (data || []).map((acc: any) => acc.id);
 
-          return {
-            ...acc,
-            game: acc.games,
-            statistics: stats || null,
-          };
-        })
-      );
+      // Batch fetch all statistics
+      const { data: allStats } = await supabase
+        .from("game_statistics")
+        .select("*")
+        .in("game_account_id", accountIds)
+        .order("updated_at", { ascending: false });
+
+      // Group by account_id and get latest for each
+      const statsMap = new Map<string, any>();
+      allStats?.forEach((stat) => {
+        const existing = statsMap.get(stat.game_account_id);
+        if (!existing || new Date(stat.updated_at) > new Date(existing.updated_at)) {
+          statsMap.set(stat.game_account_id, stat);
+        }
+      });
+
+      // Combine data
+      const accountsWithStats = (data || []).map((acc: any) => ({
+        ...acc,
+        game: acc.games,
+        statistics: statsMap.get(acc.id) || null,
+      }));
 
       setAccounts(accountsWithStats);
     } catch (error) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseClient } from "@/lib/supabase/client";
 import { useAuthStore } from "@/lib/store/useAuthStore";
@@ -9,6 +9,26 @@ export function useAuth() {
   const router = useRouter();
   const supabase = createSupabaseClient();
   const { user, setUser, setLoading } = useAuthStore();
+  const lastSeenTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Debounced last_seen update (only update every 30 seconds max)
+  const updateLastSeen = (userId: string) => {
+    if (lastSeenTimeoutRef.current) {
+      clearTimeout(lastSeenTimeoutRef.current);
+    }
+    
+    lastSeenTimeoutRef.current = setTimeout(async () => {
+      try {
+        await supabase
+          .from("profiles")
+          .update({ last_seen: new Date().toISOString() })
+          .eq("id", userId);
+      } catch (error) {
+        // non-blocking
+        console.warn("last_seen update failed", error);
+      }
+    }, 30000); // Update max once every 30 seconds
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -19,17 +39,9 @@ export function useAuth() {
         setUser(session?.user ?? null);
         setLoading(false);
 
-        // Touch last_seen for online status
+        // Touch last_seen for online status (debounced)
         if (session?.user) {
-          try {
-            await supabase
-              .from("profiles")
-              .update({ last_seen: new Date().toISOString() })
-              .eq("id", session.user.id);
-          } catch (error) {
-            // non-blocking
-            console.warn("last_seen update failed", error);
-          }
+          updateLastSeen(session.user.id);
         }
       }
     });
@@ -42,20 +54,16 @@ export function useAuth() {
         setUser(session?.user ?? null);
 
         if (session?.user) {
-          try {
-            await supabase
-              .from("profiles")
-              .update({ last_seen: new Date().toISOString() })
-              .eq("id", session.user.id);
-          } catch (error) {
-            console.warn("last_seen update failed", error);
-          }
+          updateLastSeen(session.user.id);
         }
       }
     });
 
     return () => {
       mounted = false;
+      if (lastSeenTimeoutRef.current) {
+        clearTimeout(lastSeenTimeoutRef.current);
+      }
       try {
         subscription.unsubscribe();
       } catch (error) {
